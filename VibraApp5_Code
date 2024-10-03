@@ -1,0 +1,371 @@
+classdef vibra5 < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                        matlab.ui.Figure
+        OverallVibrationReductionEditField  matlab.ui.control.NumericEditField
+        OverallVibrationReductionLabel  matlab.ui.control.Label
+        axisEditField                   matlab.ui.control.EditField
+        axisEditFieldLabel              matlab.ui.control.Label
+        AmplitudeNewEditField           matlab.ui.control.NumericEditField
+        AmplitudeNewEditFieldLabel      matlab.ui.control.Label
+        NaturalFrequencyNewHzEditField  matlab.ui.control.NumericEditField
+        NaturalFrequencyNewHzEditFieldLabel  matlab.ui.control.Label
+        AmplitudeOldEditField           matlab.ui.control.NumericEditField
+        AmplitudeOldEditFieldLabel      matlab.ui.control.Label
+        NaturalFrequencyOldHzEditField  matlab.ui.control.NumericEditField
+        NaturalFrequencyOldHzEditFieldLabel  matlab.ui.control.Label
+        AnalyzeButton                   matlab.ui.control.Button
+        SelectedAfterDamperFileDropDown  matlab.ui.control.DropDown
+        SelectedAfterDamperFileDropDownLabel  matlab.ui.control.Label
+        SelectedBeforeDamperFileDropDown  matlab.ui.control.DropDown
+        SelectedBeforeDamperFileDropDownLabel  matlab.ui.control.Label
+        SystemComparisonLabel           matlab.ui.control.Label
+        UIAxes2                         matlab.ui.control.UIAxes
+        UIAxes                          matlab.ui.control.UIAxes
+    end
+
+    
+    properties (Access = public)
+        DataAX  % Data for X-axis acceleration
+        DataAY  % Data for Y-axis acceleration
+        DataAZ  % Data for Z-axis acceleration
+        time
+        Fs
+        T
+        L
+        t
+        b
+        c
+        k
+        D
+        G
+        n
+        natural_frequency_y
+        %P1_y
+        damping_coefficient_y 
+        axis
+        new_DataAX
+        new_DataAY
+        new_DataAZ
+        new_time
+        new_Fs
+        new_L
+    end
+    
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            app.UIFigure.Name = "Vibra SensePro";
+
+            % Get a list of all CSV files in the directory
+            csvFiles = dir('*.csv');
+            fileNames = {csvFiles.name};
+
+            % Set the dropdown items to these file names
+            app.SelectedBeforeDamperFileDropDown.Items = fileNames;
+            app.SelectedAfterDamperFileDropDown.Items = fileNames;
+            %app.AxisDropDown.Items = ["AX", "AY", "AZ"];
+        end
+
+        % Value changed function: SelectedBeforeDamperFileDropDown
+        function SelectedBeforeDamperFileDropDownValueChanged(app, event)
+            value1= app.SelectedBeforeDamperFileDropDown.Value;
+            app.b = readtable(value1, 'FileType', 'text');
+
+        end
+
+        % Value changed function: SelectedAfterDamperFileDropDown
+        function SelectedAfterDamperFileDropDownValueChanged(app, event)
+            value2 = app.SelectedAfterDamperFileDropDown.Value;
+            app.c = readtable(value2, 'FileType', 'text');
+
+            
+        end
+
+        % Button pushed function: AnalyzeButton
+        function AnalyzeButtonPushed(app, event)
+            data = table2array(app.b);
+
+            app.DataAX = table2array(app.b(:,"AX"));
+            app.DataAY = table2array(app.b(:,"AY"));
+            app.DataAZ = table2array(app.b(:,"AZ"));
+
+            % Convert the time data to seconds
+            app.time = data(:, 4)*3600 + data(:, 5)*60 + data(:, 6) + data(:, 7)/1000; % Time in seconds
+        
+            app.Fs = 1 / mean(diff(app.time));
+            %app.T = 1/app.Fs;
+            app.L = length(app.DataAX);
+            %app.t = (0:app.L-1)*app.T;
+
+            compute_spectrum = @(signal) abs(fft(signal)/app.L);
+            get_single_sided = @(P2) P2(2:floor(app.L/2)+1);
+            adjust_amplitude = @(P1) [2*P1(1:end-1); P1(end)];
+
+            f = app.Fs .* (1:floor(app.L/2))/app.L;
+
+            P2_x = compute_spectrum(app.DataAX);
+            P1_x = adjust_amplitude(get_single_sided(P2_x));
+
+            P2_y = compute_spectrum(app.DataAY);
+            P1_y = adjust_amplitude(get_single_sided(P2_y));
+
+            P2_z = compute_spectrum(app.DataAZ);
+            P1_z = adjust_amplitude(get_single_sided(P2_z));
+
+
+            switch app.axis
+                case 'X'
+                    P1_old = P1_x;
+                    %axis_label = 'X-axis';
+                case 'Y'
+                    P1_old = P1_y;
+                    %axis_label = 'Y-axis';
+                case 'Z'
+                    P1_old = P1_z;
+                    %axis_label = 'Z-axis';
+            end
+
+            %after damping
+
+            new_data = table2array(app.c);
+
+            app.new_DataAX = table2array(app.c(:,"AX"));
+            app.new_DataAY = table2array(app.c(:,"AY"));
+            app.new_DataAZ = table2array(app.c(:,"AZ"));
+
+            % Convert the time data to seconds
+            app.new_time = new_data(:, 4)*3600 + new_data(:, 5)*60 + new_data(:, 6) + new_data(:, 7)/1000; % Time in seconds
+        
+            app.new_Fs = 1 / mean(diff(app.new_time));
+            %app.new_T = 1/app.new_Fs;
+            app.new_L = length(app.new_DataAX);
+            %app.new_t = (0:app.new_L-1)*app.new_T;
+
+            compute_spectrum = @(signal) abs(fft(signal)/app.new_L);
+            get_single_sided = @(P2) P2(2:floor(app.new_L/2)+1);
+            adjust_amplitude = @(P1) [2*P1(1:end-1); P1(end)];
+
+            new_f = app.new_Fs .* (1:floor(app.new_L/2))/app.new_L;
+
+            new_P2_x = compute_spectrum(app.new_DataAX);
+            %new_P1_x = adjust_amplitude(get_single_sided(P2_x));
+
+            new_P2_y = compute_spectrum(app.new_DataAY);
+            %new_P1_y = adjust_amplitude(get_single_sided(P2_y));
+
+            new_P2_z = compute_spectrum(app.new_DataAZ);
+            %new_P1_z = adjust_amplitude(get_single_sided(P2_z));
+
+
+            switch app.axis
+                case 'X'
+                    new_P2 = new_P2_x;
+                case 'Y'
+                    new_P2 = new_P2_y;                
+                case 'Z'
+                    new_P2 = new_P2_z;
+            end
+
+            new_P1= adjust_amplitude(get_single_sided(new_P2));
+
+            plot(app.UIAxes, f, P1_old,'r');
+            app.UIAxes.Title.String = ['Freq. Spectrum Before Damper - ' upper(app.axis) '-axis'];
+            app.UIAxes.XLabel.String = 'Frequency (Hz)';
+            app.UIAxes.YLabel.String = '|P1(f)|';
+
+            plot(app.UIAxes2, new_f, new_P1)
+            app.UIAxes2.Title.String = ['Freq. Spectrum After Damper - ' upper(app.axis) '-axis'];
+            app.UIAxes2.XLabel.String = 'Frequency (Hz)';
+            app.UIAxes2.YLabel.String = '|P1(f)|';
+
+            % Find the natural frequency and amplitude for the old data
+            [~, idx_old] = max(P1_old);
+            natural_frequency_old = f(idx_old);
+            amplitude_old = P1_old(idx_old);
+            
+            % Find the natural frequency and amplitude for the new data
+            [~, idx_new] = max(new_P1);
+            natural_frequency_new = new_f(idx_new);
+            amplitude_new = new_P1(idx_new);
+
+            app.NaturalFrequencyOldHzEditField.Value = natural_frequency_old;
+            app.NaturalFrequencyNewHzEditField.Value = natural_frequency_new;
+            app.AmplitudeOldEditField.Value = amplitude_old;
+            app.AmplitudeNewEditField.Value = amplitude_new;
+
+            improvement_percentage = ((amplitude_old - amplitude_new) / amplitude_old) * 100;
+            app.OverallVibrationReductionEditField.Value = improvement_percentage;
+
+            
+        end
+
+        % Value changed function: axisEditField
+        function axisEditFieldValueChanged(app, event)
+            app.axis = app.axisEditField.Value;
+            
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Color = [0.8 0.8 0.8];
+            app.UIFigure.Position = [100 100 783 500];
+            app.UIFigure.Name = 'MATLAB App';
+
+            % Create UIAxes
+            app.UIAxes = uiaxes(app.UIFigure);
+            title(app.UIAxes, 'Title')
+            xlabel(app.UIAxes, 'X')
+            ylabel(app.UIAxes, 'Y')
+            zlabel(app.UIAxes, 'Z')
+            app.UIAxes.Position = [23 144 342 224];
+
+            % Create UIAxes2
+            app.UIAxes2 = uiaxes(app.UIFigure);
+            title(app.UIAxes2, 'Title')
+            xlabel(app.UIAxes2, 'X')
+            ylabel(app.UIAxes2, 'Y')
+            zlabel(app.UIAxes2, 'Z')
+            app.UIAxes2.Position = [411 144 353 224];
+
+            % Create SystemComparisonLabel
+            app.SystemComparisonLabel = uilabel(app.UIFigure);
+            app.SystemComparisonLabel.FontSize = 20;
+            app.SystemComparisonLabel.FontWeight = 'bold';
+            app.SystemComparisonLabel.Position = [284 461 199 27];
+            app.SystemComparisonLabel.Text = 'System Comparison';
+
+            % Create SelectedBeforeDamperFileDropDownLabel
+            app.SelectedBeforeDamperFileDropDownLabel = uilabel(app.UIFigure);
+            app.SelectedBeforeDamperFileDropDownLabel.HorizontalAlignment = 'right';
+            app.SelectedBeforeDamperFileDropDownLabel.Position = [29 429 159 22];
+            app.SelectedBeforeDamperFileDropDownLabel.Text = 'Selected Before Damper File';
+
+            % Create SelectedBeforeDamperFileDropDown
+            app.SelectedBeforeDamperFileDropDown = uidropdown(app.UIFigure);
+            app.SelectedBeforeDamperFileDropDown.ValueChangedFcn = createCallbackFcn(app, @SelectedBeforeDamperFileDropDownValueChanged, true);
+            app.SelectedBeforeDamperFileDropDown.Position = [203 429 100 22];
+
+            % Create SelectedAfterDamperFileDropDownLabel
+            app.SelectedAfterDamperFileDropDownLabel = uilabel(app.UIFigure);
+            app.SelectedAfterDamperFileDropDownLabel.HorizontalAlignment = 'right';
+            app.SelectedAfterDamperFileDropDownLabel.Position = [460 429 149 22];
+            app.SelectedAfterDamperFileDropDownLabel.Text = 'Selected After Damper File';
+
+            % Create SelectedAfterDamperFileDropDown
+            app.SelectedAfterDamperFileDropDown = uidropdown(app.UIFigure);
+            app.SelectedAfterDamperFileDropDown.ValueChangedFcn = createCallbackFcn(app, @SelectedAfterDamperFileDropDownValueChanged, true);
+            app.SelectedAfterDamperFileDropDown.Position = [624 429 100 22];
+
+            % Create AnalyzeButton
+            app.AnalyzeButton = uibutton(app.UIFigure, 'push');
+            app.AnalyzeButton.ButtonPushedFcn = createCallbackFcn(app, @AnalyzeButtonPushed, true);
+            app.AnalyzeButton.Position = [438 385 100 23];
+            app.AnalyzeButton.Text = 'Analyze';
+
+            % Create NaturalFrequencyOldHzEditFieldLabel
+            app.NaturalFrequencyOldHzEditFieldLabel = uilabel(app.UIFigure);
+            app.NaturalFrequencyOldHzEditFieldLabel.HorizontalAlignment = 'right';
+            app.NaturalFrequencyOldHzEditFieldLabel.Position = [31 104 150 22];
+            app.NaturalFrequencyOldHzEditFieldLabel.Text = 'Natural Frequency Old (Hz)';
+
+            % Create NaturalFrequencyOldHzEditField
+            app.NaturalFrequencyOldHzEditField = uieditfield(app.UIFigure, 'numeric');
+            app.NaturalFrequencyOldHzEditField.Position = [196 104 100 22];
+
+            % Create AmplitudeOldEditFieldLabel
+            app.AmplitudeOldEditFieldLabel = uilabel(app.UIFigure);
+            app.AmplitudeOldEditFieldLabel.HorizontalAlignment = 'right';
+            app.AmplitudeOldEditFieldLabel.Position = [99 62 82 22];
+            app.AmplitudeOldEditFieldLabel.Text = 'Amplitude Old';
+
+            % Create AmplitudeOldEditField
+            app.AmplitudeOldEditField = uieditfield(app.UIFigure, 'numeric');
+            app.AmplitudeOldEditField.Position = [196 62 100 22];
+
+            % Create NaturalFrequencyNewHzEditFieldLabel
+            app.NaturalFrequencyNewHzEditFieldLabel = uilabel(app.UIFigure);
+            app.NaturalFrequencyNewHzEditFieldLabel.HorizontalAlignment = 'right';
+            app.NaturalFrequencyNewHzEditFieldLabel.Position = [431 104 155 22];
+            app.NaturalFrequencyNewHzEditFieldLabel.Text = 'Natural Frequency New (Hz)';
+
+            % Create NaturalFrequencyNewHzEditField
+            app.NaturalFrequencyNewHzEditField = uieditfield(app.UIFigure, 'numeric');
+            app.NaturalFrequencyNewHzEditField.Position = [601 104 100 22];
+
+            % Create AmplitudeNewEditFieldLabel
+            app.AmplitudeNewEditFieldLabel = uilabel(app.UIFigure);
+            app.AmplitudeNewEditFieldLabel.HorizontalAlignment = 'right';
+            app.AmplitudeNewEditFieldLabel.Position = [501 62 87 22];
+            app.AmplitudeNewEditFieldLabel.Text = 'Amplitude New';
+
+            % Create AmplitudeNewEditField
+            app.AmplitudeNewEditField = uieditfield(app.UIFigure, 'numeric');
+            app.AmplitudeNewEditField.Position = [603 62 100 22];
+
+            % Create axisEditFieldLabel
+            app.axisEditFieldLabel = uilabel(app.UIFigure);
+            app.axisEditFieldLabel.HorizontalAlignment = 'right';
+            app.axisEditFieldLabel.Position = [270 385 27 22];
+            app.axisEditFieldLabel.Text = 'axis';
+
+            % Create axisEditField
+            app.axisEditField = uieditfield(app.UIFigure, 'text');
+            app.axisEditField.ValueChangedFcn = createCallbackFcn(app, @axisEditFieldValueChanged, true);
+            app.axisEditField.Position = [312 385 100 22];
+
+            % Create OverallVibrationReductionLabel
+            app.OverallVibrationReductionLabel = uilabel(app.UIFigure);
+            app.OverallVibrationReductionLabel.HorizontalAlignment = 'right';
+            app.OverallVibrationReductionLabel.FontWeight = 'bold';
+            app.OverallVibrationReductionLabel.Position = [230 16 177 22];
+            app.OverallVibrationReductionLabel.Text = 'Overall Vibration Reduction %';
+
+            % Create OverallVibrationReductionEditField
+            app.OverallVibrationReductionEditField = uieditfield(app.UIFigure, 'numeric');
+            app.OverallVibrationReductionEditField.Position = [422 16 100 22];
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = vibra5
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
