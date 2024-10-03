@@ -1,0 +1,415 @@
+classdef vibra4 < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                        matlab.ui.Figure
+        NextButton                      matlab.ui.control.Button
+        ShockAbsorberParametersLabel    matlab.ui.control.Label
+        SystemParametersLabel           matlab.ui.control.Label
+        NaturalFrequencyHzEditField     matlab.ui.control.NumericEditField
+        NaturalFrequencyHzEditFieldLabel  matlab.ui.control.Label
+        EnterButton_4                   matlab.ui.control.Button
+        WireDiametermmEditField         matlab.ui.control.NumericEditField
+        WireDiametermmEditFieldLabel    matlab.ui.control.Label
+        EnterButton_3                   matlab.ui.control.Button
+        NumberofActiveCoilsEditField    matlab.ui.control.NumericEditField
+        NumberofActiveCoilsEditFieldLabel  matlab.ui.control.Label
+        ShearModulusPaEditField         matlab.ui.control.NumericEditField
+        ShearModulusPaEditFieldLabel    matlab.ui.control.Label
+        MeanCoilDiametermEditField      matlab.ui.control.NumericEditField
+        MeanCoilDiametermEditFieldLabel  matlab.ui.control.Label
+        DynamicViscosityPasEditField    matlab.ui.control.NumericEditField
+        DynamicViscosityPasEditFieldLabel  matlab.ui.control.Label
+        EnterButton_2                   matlab.ui.control.Button
+        PistonDiametermEditField        matlab.ui.control.NumericEditField
+        PistonDiametermLabel            matlab.ui.control.Label
+        DampingCoefficientNsmEditField  matlab.ui.control.NumericEditField
+        DampingCoefficientNsmEditFieldLabel  matlab.ui.control.Label
+        DampingRatioEditField           matlab.ui.control.NumericEditField
+        DampingRatioLabel               matlab.ui.control.Label
+        SpringConstantNmEditField       matlab.ui.control.NumericEditField
+        SpringConstantNmEditFieldLabel  matlab.ui.control.Label
+        EnterButton                     matlab.ui.control.Button
+        MasskgEditField                 matlab.ui.control.NumericEditField
+        MasskgLabel                     matlab.ui.control.Label
+        SelectedFileDropDown            matlab.ui.control.DropDown
+        SelectedFileDropDownLabel       matlab.ui.control.Label
+    end
+
+    
+    properties (Access = public)
+        DataAX  % Data for X-axis acceleration
+        DataAY  % Data for Y-axis acceleration
+        DataAZ  % Data for Z-axis acceleration
+        time
+        Fs
+        T
+        L
+        t
+        b
+        k
+        D
+        G
+        n
+        natural_frequency_y
+        P1_y
+        damping_coefficient_y
+    end
+    
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            app.UIFigure.Name = "Vibra SensePro";
+
+            % Get a list of all CSV files in the directory
+            csvFiles = dir('*.csv');
+            fileNames = {csvFiles.name};
+
+            % Set the dropdown items to these file names
+            app.SelectedFileDropDown.Items = fileNames;
+
+            
+            
+
+        end
+
+        % Button pushed function: EnterButton_4
+        function EnterButton_4Pushed(app, event)
+            data = table2array(app.b);
+
+            app.DataAX = table2array(app.b(:,"AX"));
+            app.DataAY = table2array(app.b(:,"AY"));
+            app.DataAZ = table2array(app.b(:,"AZ"));
+
+            % Convert the time data to seconds
+            app.time = data(:, 4)*3600 + data(:, 5)*60 + data(:, 6) + data(:, 7)/1000; % Time in seconds
+        
+            app.Fs = 1 / mean(diff(app.time));
+            %app.T = 1/app.Fs;
+            app.L = length(app.DataAX);
+            %app.t = (0:app.L-1)*app.T;
+
+            compute_spectrum = @(signal) abs(fft(signal)/app.L);
+            get_single_sided = @(P2) P2(2:floor(app.L/2)+1);
+            adjust_amplitude = @(P1) [2*P1(1:end-1); P1(end)];
+
+            f = app.Fs .* (1:floor(app.L/2))/app.L;
+
+            %P2_x = compute_spectrum(app.DataAX);
+            %P1_x = adjust_amplitude(get_single_sided(P2_x));
+
+            P2_y = compute_spectrum(app.DataAY);
+            app.P1_y = adjust_amplitude(get_single_sided(P2_y));
+
+            %P2_z = compute_spectrum(app.DataAZ);
+            %P1_z = adjust_amplitude(get_single_sided(P2_z));
+
+            %max_amplitude_y = max(P1_y);
+
+            [~, idx_y] = max(app.P1_y);
+            app.natural_frequency_y = f(idx_y);
+            %formatted_frequency = sprintf('%.4f', natural_frequency_y);
+            app.natural_frequency_y = round(app.natural_frequency_y, 4);
+
+            app.NaturalFrequencyHzEditField.Value = app.natural_frequency_y;
+        end
+
+        % Value changed function: SelectedFileDropDown
+        function SelectedFileDropDownValueChanged(app, event)
+            selectedFile = app.SelectedFileDropDown.Value;
+            app.b = readtable(selectedFile, 'FileType', 'text');
+
+        end
+
+        % Value changed function: MasskgEditField
+        function MasskgEditFieldValueChanged(app, event)
+            userinput = app.MasskgEditField.Value;
+            disp(userinput);
+            
+        end
+
+        % Button pushed function: EnterButton
+        function EnterButtonPushed(app, event)
+            mass = app.MasskgEditField.Value;
+            app.k = mass * (2 * pi * app.natural_frequency_y)^2;
+            app.SpringConstantNmEditField.Value = app.k;
+
+            bandwidth_y = sum(app.P1_y >= (max(app.P1_y)/sqrt(2))) * (app.Fs/app.L);
+            damping_ratio_y = bandwidth_y / (2 * app.natural_frequency_y);
+            app.DampingRatioEditField.Value = damping_ratio_y;
+
+            app.damping_coefficient_y = 2 * damping_ratio_y * sqrt(app.k * mass);
+            app.DampingCoefficientNsmEditField.Value = app.damping_coefficient_y;
+
+          
+        end
+
+        % Value changed function: PistonDiametermEditField
+        function PistonDiametermEditFieldValueChanged(app, event)
+            disp(app.PistonDiametermEditField.Value)
+            
+        end
+
+        % Button pushed function: EnterButton_2
+        function EnterButton_2Pushed(app, event)
+            piston_diameter = app.PistonDiametermEditField.Value;
+            A = pi * (piston_diameter/2)^2;
+            eta = app.damping_coefficient_y / A;
+            app.DynamicViscosityPasEditField.Value = eta;
+        end
+
+        % Value changed function: MeanCoilDiametermEditField
+        function MeanCoilDiametermEditFieldValueChanged(app, event)
+            app.D = app.MeanCoilDiametermEditField.Value;
+            disp(app.D);
+            
+        end
+
+        % Value changed function: ShearModulusPaEditField
+        function ShearModulusPaEditFieldValueChanged(app, event)
+            app.G = app.ShearModulusPaEditField.Value;
+            disp(app.G);
+            
+        end
+
+        % Value changed function: NumberofActiveCoilsEditField
+        function NumberofActiveCoilsEditFieldValueChanged(app, event)
+            app.n = app.NumberofActiveCoilsEditField.Value;
+            disp(app.n);
+            
+        end
+
+        % Button pushed function: EnterButton_3
+        function EnterButton_3Pushed(app, event)
+            d = ((8 * app.k * app.D^3 * app.n) / app.G)^(1/4)*200;
+            app.WireDiametermmEditField.Value = d;
+        end
+
+        % Button pushed function: NextButton
+        function NextButtonPushed(app, event)
+            vibra5
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Color = [0.8 0.8 0.8];
+            app.UIFigure.Position = [100 100 720 623];
+            app.UIFigure.Name = 'MATLAB App';
+
+            % Create SelectedFileDropDownLabel
+            app.SelectedFileDropDownLabel = uilabel(app.UIFigure);
+            app.SelectedFileDropDownLabel.HorizontalAlignment = 'right';
+            app.SelectedFileDropDownLabel.FontAngle = 'italic';
+            app.SelectedFileDropDownLabel.Position = [72 523 74 22];
+            app.SelectedFileDropDownLabel.Text = 'Selected File';
+
+            % Create SelectedFileDropDown
+            app.SelectedFileDropDown = uidropdown(app.UIFigure);
+            app.SelectedFileDropDown.ValueChangedFcn = createCallbackFcn(app, @SelectedFileDropDownValueChanged, true);
+            app.SelectedFileDropDown.Position = [161 523 100 22];
+
+            % Create MasskgLabel
+            app.MasskgLabel = uilabel(app.UIFigure);
+            app.MasskgLabel.HorizontalAlignment = 'right';
+            app.MasskgLabel.Position = [89 418 57 22];
+            app.MasskgLabel.Text = 'Mass (kg)';
+
+            % Create MasskgEditField
+            app.MasskgEditField = uieditfield(app.UIFigure, 'numeric');
+            app.MasskgEditField.ValueChangedFcn = createCallbackFcn(app, @MasskgEditFieldValueChanged, true);
+            app.MasskgEditField.Position = [161 418 100 22];
+
+            % Create EnterButton
+            app.EnterButton = uibutton(app.UIFigure, 'push');
+            app.EnterButton.ButtonPushedFcn = createCallbackFcn(app, @EnterButtonPushed, true);
+            app.EnterButton.Position = [307 418 100 23];
+            app.EnterButton.Text = 'Enter';
+
+            % Create SpringConstantNmEditFieldLabel
+            app.SpringConstantNmEditFieldLabel = uilabel(app.UIFigure);
+            app.SpringConstantNmEditFieldLabel.HorizontalAlignment = 'right';
+            app.SpringConstantNmEditFieldLabel.Position = [448 460 125 22];
+            app.SpringConstantNmEditFieldLabel.Text = 'Spring Constant (N/m)';
+
+            % Create SpringConstantNmEditField
+            app.SpringConstantNmEditField = uieditfield(app.UIFigure, 'numeric');
+            app.SpringConstantNmEditField.Position = [588 460 100 22];
+
+            % Create DampingRatioLabel
+            app.DampingRatioLabel = uilabel(app.UIFigure);
+            app.DampingRatioLabel.HorizontalAlignment = 'right';
+            app.DampingRatioLabel.Position = [485 421 88 22];
+            app.DampingRatioLabel.Text = 'Damping Ratio ';
+
+            % Create DampingRatioEditField
+            app.DampingRatioEditField = uieditfield(app.UIFigure, 'numeric');
+            app.DampingRatioEditField.Position = [588 421 100 22];
+
+            % Create DampingCoefficientNsmEditFieldLabel
+            app.DampingCoefficientNsmEditFieldLabel = uilabel(app.UIFigure);
+            app.DampingCoefficientNsmEditFieldLabel.HorizontalAlignment = 'right';
+            app.DampingCoefficientNsmEditFieldLabel.Position = [420 377 153 22];
+            app.DampingCoefficientNsmEditFieldLabel.Text = 'Damping Coefficient (Ns/m)';
+
+            % Create DampingCoefficientNsmEditField
+            app.DampingCoefficientNsmEditField = uieditfield(app.UIFigure, 'numeric');
+            app.DampingCoefficientNsmEditField.Position = [588 377 100 22];
+
+            % Create PistonDiametermLabel
+            app.PistonDiametermLabel = uilabel(app.UIFigure);
+            app.PistonDiametermLabel.HorizontalAlignment = 'right';
+            app.PistonDiametermLabel.Position = [42 257 111 22];
+            app.PistonDiametermLabel.Text = 'Piston Diameter (m)';
+
+            % Create PistonDiametermEditField
+            app.PistonDiametermEditField = uieditfield(app.UIFigure, 'numeric');
+            app.PistonDiametermEditField.ValueChangedFcn = createCallbackFcn(app, @PistonDiametermEditFieldValueChanged, true);
+            app.PistonDiametermEditField.Position = [168 257 100 22];
+
+            % Create EnterButton_2
+            app.EnterButton_2 = uibutton(app.UIFigure, 'push');
+            app.EnterButton_2.ButtonPushedFcn = createCallbackFcn(app, @EnterButton_2Pushed, true);
+            app.EnterButton_2.Position = [315 256 100 23];
+            app.EnterButton_2.Text = 'Enter';
+
+            % Create DynamicViscosityPasEditFieldLabel
+            app.DynamicViscosityPasEditFieldLabel = uilabel(app.UIFigure);
+            app.DynamicViscosityPasEditFieldLabel.HorizontalAlignment = 'right';
+            app.DynamicViscosityPasEditFieldLabel.Position = [445 256 136 22];
+            app.DynamicViscosityPasEditFieldLabel.Text = 'Dynamic Viscosity (Pa.s)';
+
+            % Create DynamicViscosityPasEditField
+            app.DynamicViscosityPasEditField = uieditfield(app.UIFigure, 'numeric');
+            app.DynamicViscosityPasEditField.Position = [596 256 100 22];
+
+            % Create MeanCoilDiametermEditFieldLabel
+            app.MeanCoilDiametermEditFieldLabel = uilabel(app.UIFigure);
+            app.MeanCoilDiametermEditFieldLabel.HorizontalAlignment = 'right';
+            app.MeanCoilDiametermEditFieldLabel.Position = [21 178 131 22];
+            app.MeanCoilDiametermEditFieldLabel.Text = 'Mean Coil Diameter( m)';
+
+            % Create MeanCoilDiametermEditField
+            app.MeanCoilDiametermEditField = uieditfield(app.UIFigure, 'numeric');
+            app.MeanCoilDiametermEditField.ValueChangedFcn = createCallbackFcn(app, @MeanCoilDiametermEditFieldValueChanged, true);
+            app.MeanCoilDiametermEditField.Position = [167 178 100 22];
+
+            % Create ShearModulusPaEditFieldLabel
+            app.ShearModulusPaEditFieldLabel = uilabel(app.UIFigure);
+            app.ShearModulusPaEditFieldLabel.HorizontalAlignment = 'right';
+            app.ShearModulusPaEditFieldLabel.Position = [42 123 110 22];
+            app.ShearModulusPaEditFieldLabel.Text = 'Shear Modulus (Pa)';
+
+            % Create ShearModulusPaEditField
+            app.ShearModulusPaEditField = uieditfield(app.UIFigure, 'numeric');
+            app.ShearModulusPaEditField.ValueChangedFcn = createCallbackFcn(app, @ShearModulusPaEditFieldValueChanged, true);
+            app.ShearModulusPaEditField.Position = [167 123 100 22];
+
+            % Create NumberofActiveCoilsEditFieldLabel
+            app.NumberofActiveCoilsEditFieldLabel = uilabel(app.UIFigure);
+            app.NumberofActiveCoilsEditFieldLabel.HorizontalAlignment = 'right';
+            app.NumberofActiveCoilsEditFieldLabel.Position = [23 64 129 22];
+            app.NumberofActiveCoilsEditFieldLabel.Text = 'Number of Active Coils';
+
+            % Create NumberofActiveCoilsEditField
+            app.NumberofActiveCoilsEditField = uieditfield(app.UIFigure, 'numeric');
+            app.NumberofActiveCoilsEditField.ValueChangedFcn = createCallbackFcn(app, @NumberofActiveCoilsEditFieldValueChanged, true);
+            app.NumberofActiveCoilsEditField.Position = [167 64 100 22];
+
+            % Create EnterButton_3
+            app.EnterButton_3 = uibutton(app.UIFigure, 'push');
+            app.EnterButton_3.ButtonPushedFcn = createCallbackFcn(app, @EnterButton_3Pushed, true);
+            app.EnterButton_3.Position = [313 121 100 23];
+            app.EnterButton_3.Text = 'Enter';
+
+            % Create WireDiametermmEditFieldLabel
+            app.WireDiametermmEditFieldLabel = uilabel(app.UIFigure);
+            app.WireDiametermmEditFieldLabel.HorizontalAlignment = 'right';
+            app.WireDiametermmEditFieldLabel.Position = [466 131 111 22];
+            app.WireDiametermmEditFieldLabel.Text = 'Wire Diameter (mm)';
+
+            % Create WireDiametermmEditField
+            app.WireDiametermmEditField = uieditfield(app.UIFigure, 'numeric');
+            app.WireDiametermmEditField.Position = [592 131 100 22];
+
+            % Create EnterButton_4
+            app.EnterButton_4 = uibutton(app.UIFigure, 'push');
+            app.EnterButton_4.ButtonPushedFcn = createCallbackFcn(app, @EnterButton_4Pushed, true);
+            app.EnterButton_4.Position = [307 522 100 23];
+            app.EnterButton_4.Text = 'Enter';
+
+            % Create NaturalFrequencyHzEditFieldLabel
+            app.NaturalFrequencyHzEditFieldLabel = uilabel(app.UIFigure);
+            app.NaturalFrequencyHzEditFieldLabel.HorizontalAlignment = 'right';
+            app.NaturalFrequencyHzEditFieldLabel.Position = [443 523 128 22];
+            app.NaturalFrequencyHzEditFieldLabel.Text = 'Natural Frequency (Hz)';
+
+            % Create NaturalFrequencyHzEditField
+            app.NaturalFrequencyHzEditField = uieditfield(app.UIFigure, 'numeric');
+            app.NaturalFrequencyHzEditField.Position = [586 523 100 22];
+
+            % Create SystemParametersLabel
+            app.SystemParametersLabel = uilabel(app.UIFigure);
+            app.SystemParametersLabel.HorizontalAlignment = 'center';
+            app.SystemParametersLabel.FontSize = 24;
+            app.SystemParametersLabel.FontWeight = 'bold';
+            app.SystemParametersLabel.Position = [247 570 232 33];
+            app.SystemParametersLabel.Text = 'System Parameters';
+
+            % Create ShockAbsorberParametersLabel
+            app.ShockAbsorberParametersLabel = uilabel(app.UIFigure);
+            app.ShockAbsorberParametersLabel.HorizontalAlignment = 'center';
+            app.ShockAbsorberParametersLabel.FontSize = 24;
+            app.ShockAbsorberParametersLabel.FontWeight = 'bold';
+            app.ShockAbsorberParametersLabel.Position = [196 316 334 33];
+            app.ShockAbsorberParametersLabel.Text = 'Shock Absorber Parameters';
+
+            % Create NextButton
+            app.NextButton = uibutton(app.UIFigure, 'push');
+            app.NextButton.ButtonPushedFcn = createCallbackFcn(app, @NextButtonPushed, true);
+            app.NextButton.FontAngle = 'italic';
+            app.NextButton.Position = [596 16 100 23];
+            app.NextButton.Text = 'Next';
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = vibra4
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
