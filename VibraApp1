@@ -1,0 +1,199 @@
+classdef vibra1 < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                   matlab.ui.Figure
+        SelectedFileDropDown       matlab.ui.control.DropDown
+        SelectedFileDropDownLabel  matlab.ui.control.Label
+        NextButton                 matlab.ui.control.Button
+        ReadDataButton             matlab.ui.control.Button
+        EditField                  matlab.ui.control.EditField
+        UIAxesZ                    matlab.ui.control.UIAxes
+        UIAxesY                    matlab.ui.control.UIAxes
+        UIAxesX                    matlab.ui.control.UIAxes
+    end
+
+    
+    properties (Access = public)
+        DataAX  % Data for X-axis acceleration
+        DataAY  % Data for Y-axis acceleration
+        DataAZ  % Data for Z-axis acceleration
+        time
+        Fs
+        T
+        L
+        t
+        k
+
+ % Description
+    end
+    
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            app.UIFigure.Name = "Vibra SensePro";
+
+            % Get a list of all CSV files in the directory
+            csvFiles = dir('*.csv');
+            fileNames = {csvFiles.name};
+
+            % Set the dropdown items to these file names
+            app.SelectedFileDropDown.Items = fileNames;
+
+        end
+
+        % Button pushed function: ReadDataButton
+        function ReadDataButtonPushed(app, event)
+            %app.k = readtable('test.csv','FileType','text');
+
+            data = table2array(app.k);
+
+            app.DataAX = table2array(app.k(:,"AX"));
+            app.DataAY = table2array(app.k(:,"AY"));
+            app.DataAZ = table2array(app.k(:,"AZ"));
+
+            % Convert the time data to seconds
+            app.time = data(:, 4)*3600 + data(:, 5)*60 + data(:, 6) + data(:, 7)/1000; % Time in seconds
+        
+            app.Fs = 1 / mean(diff(app.time));
+            app.T = 1/app.Fs;
+            app.L = length(app.DataAX);
+            app.t = (0:app.L-1)*app.T;
+        
+            plot(app.UIAxesX, app.t, app.DataAX);
+            plot(app.UIAxesY, app.t, app.DataAY);
+            plot(app.UIAxesZ, app.t, app.DataAZ);
+
+            %ax = table2array(k(:,"AX"));
+            %ay = table2array(k(:,"AY"));
+            %az = table2array(k(:,"AZ"));
+
+            %t = 1:length(ax);
+
+            %plot(app.UIAxesX,t,ax);
+            %plot(app.UIAxesY,t,ay);
+            %plot(app.UIAxesZ,t,az);
+
+        end
+
+        % Button pushed function: NextButton
+        function NextButtonPushed(app, event)
+            vibra2
+        end
+
+        % Value changed function: SelectedFileDropDown
+        function SelectedFileDropDownValueChanged(app, event)
+            selectedFile = app.SelectedFileDropDown.Value;
+            app.k = readtable(selectedFile, 'FileType', 'text');
+
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Color = [0.8 0.8 0.8];
+            app.UIFigure.Position = [100 100 731 523];
+            app.UIFigure.Name = 'MATLAB App';
+
+            % Create UIAxesX
+            app.UIAxesX = uiaxes(app.UIFigure);
+            title(app.UIAxesX, 'Acceleration -X-axis')
+            xlabel(app.UIAxesX, 'time(s)')
+            ylabel(app.UIAxesX, 'Acceleration -X-axis')
+            zlabel(app.UIAxesX, 'Z')
+            app.UIAxesX.Position = [4 242 352 203];
+
+            % Create UIAxesY
+            app.UIAxesY = uiaxes(app.UIFigure);
+            title(app.UIAxesY, 'Acceleration -Y-axis')
+            xlabel(app.UIAxesY, 'time(s)')
+            ylabel(app.UIAxesY, 'Acceleration -Y-axis')
+            zlabel(app.UIAxesY, 'Z')
+            app.UIAxesY.Position = [386 242 336 203];
+
+            % Create UIAxesZ
+            app.UIAxesZ = uiaxes(app.UIFigure);
+            title(app.UIAxesZ, 'Acceleration -Z-axis')
+            xlabel(app.UIAxesZ, 'time(s)')
+            ylabel(app.UIAxesZ, 'Acceleration -Z-axis')
+            zlabel(app.UIAxesZ, 'Z')
+            app.UIAxesZ.Position = [198 11 314 201];
+
+            % Create EditField
+            app.EditField = uieditfield(app.UIFigure, 'text');
+            app.EditField.HorizontalAlignment = 'center';
+            app.EditField.FontSize = 20;
+            app.EditField.FontWeight = 'bold';
+            app.EditField.BackgroundColor = [0.8 0.8 0.8];
+            app.EditField.Position = [177 463 178 44];
+            app.EditField.Value = 'Vibra SensePro';
+
+            % Create ReadDataButton
+            app.ReadDataButton = uibutton(app.UIFigure, 'push');
+            app.ReadDataButton.ButtonPushedFcn = createCallbackFcn(app, @ReadDataButtonPushed, true);
+            app.ReadDataButton.BackgroundColor = [0.651 0.651 0.651];
+            app.ReadDataButton.FontAngle = 'italic';
+            app.ReadDataButton.Position = [602 474 100 23];
+            app.ReadDataButton.Text = 'Read Data';
+
+            % Create NextButton
+            app.NextButton = uibutton(app.UIFigure, 'push');
+            app.NextButton.ButtonPushedFcn = createCallbackFcn(app, @NextButtonPushed, true);
+            app.NextButton.FontAngle = 'italic';
+            app.NextButton.Position = [603 20 100 23];
+            app.NextButton.Text = 'Next';
+
+            % Create SelectedFileDropDownLabel
+            app.SelectedFileDropDownLabel = uilabel(app.UIFigure);
+            app.SelectedFileDropDownLabel.HorizontalAlignment = 'right';
+            app.SelectedFileDropDownLabel.FontAngle = 'italic';
+            app.SelectedFileDropDownLabel.Position = [379 474 74 22];
+            app.SelectedFileDropDownLabel.Text = 'Selected File';
+
+            % Create SelectedFileDropDown
+            app.SelectedFileDropDown = uidropdown(app.UIFigure);
+            app.SelectedFileDropDown.ValueChangedFcn = createCallbackFcn(app, @SelectedFileDropDownValueChanged, true);
+            app.SelectedFileDropDown.Position = [468 474 100 22];
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = vibra1
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
