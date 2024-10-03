@@ -1,0 +1,217 @@
+classdef vibra2 < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                     matlab.ui.Figure
+        SelectedFileDropDown         matlab.ui.control.DropDown
+        SelectedFileDropDownLabel    matlab.ui.control.Label
+        NextButton                   matlab.ui.control.Button
+        PlotFrequencySpectrumButton  matlab.ui.control.Button
+        EditField                    matlab.ui.control.EditField
+        UIAxes3                      matlab.ui.control.UIAxes
+        UIAxes2                      matlab.ui.control.UIAxes
+        UIAxes                       matlab.ui.control.UIAxes
+    end
+
+    
+    properties (Access = public)
+        DataAX  % Data for X-axis acceleration
+        DataAY  % Data for Y-axis acceleration
+        DataAZ  % Data for Z-axis acceleration
+        time
+        Fs
+        T
+        L
+        t
+        k
+    end
+    
+    
+    
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            app.UIFigure.Name = "Vibra SensePro";
+
+            % Get a list of all CSV files in the directory
+            csvFiles = dir('*.csv');
+            fileNames = {csvFiles.name};
+
+            % Set the dropdown items to these file names
+            app.SelectedFileDropDown.Items = fileNames;
+
+
+        end
+
+        % Button pushed function: PlotFrequencySpectrumButton
+        function PlotFrequencySpectrumButtonPushed(app, event)
+            %app.k = readtable('test.csv','FileType','text');
+            %app.k = readtable(selectedFile, 'FileType', 'text');
+
+            data = table2array(app.k);
+
+            app.DataAX = table2array(app.k(:,"AX"));
+            app.DataAY = table2array(app.k(:,"AY"));
+            app.DataAZ = table2array(app.k(:,"AZ"));
+
+            % Convert the time data to seconds
+            app.time = data(:, 4)*3600 + data(:, 5)*60 + data(:, 6) + data(:, 7)/1000; % Time in seconds
+        
+            app.Fs = 1 / mean(diff(app.time));
+
+            app.T = 1/app.Fs;
+            app.L = length(app.DataAX);
+            app.t = (0:app.L-1)*app.T;
+            
+            compute_spectrum = @(signal) abs(fft(signal)/app.L);
+            get_single_sided = @(P2) P2(2:floor(app.L/2)+1);
+            adjust_amplitude = @(P1) [2*P1(1:end-1); P1(end)];
+
+            f = app.Fs .* (1:floor(app.L/2))/app.L;
+
+            P2_x = compute_spectrum(app.DataAX);
+            P1_x = adjust_amplitude(get_single_sided(P2_x));
+
+            P2_y = compute_spectrum(app.DataAY);
+            P1_y = adjust_amplitude(get_single_sided(P2_y));
+
+            P2_z = compute_spectrum(app.DataAZ);
+            P1_z = adjust_amplitude(get_single_sided(P2_z));
+
+            %max_amplitude_x = max(P1_x);
+            %max_amplitude_y = max(P1_y);
+            %max_amplitude_z = max(P1_z);
+        
+            plot(app.UIAxes, f, P1_x);
+            %ylim([0 max_amplitude_x * 1.1]);
+
+            plot(app.UIAxes2, f, P1_y);
+            %ylim([0 max_amplitude_y * 1.1]);
+
+            plot(app.UIAxes3, f, P1_z);
+            %ylim([0 max_amplitude_z * 1.1]);
+          
+
+        end
+
+        % Button pushed function: NextButton
+        function NextButtonPushed(app, event)
+            vibra4
+        end
+
+        % Value changed function: SelectedFileDropDown
+        function SelectedFileDropDownValueChanged(app, event)
+            selectedFile = app.SelectedFileDropDown.Value;
+            app.k = readtable(selectedFile);
+
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Color = [0.8 0.8 0.8];
+            app.UIFigure.Position = [100 100 739 525];
+            app.UIFigure.Name = 'MATLAB App';
+
+            % Create UIAxes
+            app.UIAxes = uiaxes(app.UIFigure);
+            title(app.UIAxes, 'Freq. Spectrum of X-axis Acceleration')
+            xlabel(app.UIAxes, 'Frequency(Hz)')
+            ylabel(app.UIAxes, '|P1(f)|')
+            zlabel(app.UIAxes, 'Z')
+            app.UIAxes.Position = [16 229 349 208];
+
+            % Create UIAxes2
+            app.UIAxes2 = uiaxes(app.UIFigure);
+            title(app.UIAxes2, 'Freq. Spectrum of Y-axis Acceleration')
+            xlabel(app.UIAxes2, 'Frequency(Hz)')
+            ylabel(app.UIAxes2, '|P2(f)|')
+            zlabel(app.UIAxes2, 'Z')
+            app.UIAxes2.Position = [382 229 347 208];
+
+            % Create UIAxes3
+            app.UIAxes3 = uiaxes(app.UIFigure);
+            title(app.UIAxes3, 'Freq. Spectrum of Z-axis Acceleration')
+            xlabel(app.UIAxes3, 'Frequency(Hz)')
+            ylabel(app.UIAxes3, '|P3(f)|')
+            zlabel(app.UIAxes3, 'Z')
+            app.UIAxes3.Position = [191 15 359 206];
+
+            % Create EditField
+            app.EditField = uieditfield(app.UIFigure, 'text');
+            app.EditField.HorizontalAlignment = 'center';
+            app.EditField.FontSize = 18;
+            app.EditField.FontWeight = 'bold';
+            app.EditField.BackgroundColor = [0.8 0.8 0.8];
+            app.EditField.Position = [96 464 190 39];
+            app.EditField.Value = 'Frequency Spectrum';
+
+            % Create PlotFrequencySpectrumButton
+            app.PlotFrequencySpectrumButton = uibutton(app.UIFigure, 'push');
+            app.PlotFrequencySpectrumButton.ButtonPushedFcn = createCallbackFcn(app, @PlotFrequencySpectrumButtonPushed, true);
+            app.PlotFrequencySpectrumButton.BackgroundColor = [0.651 0.651 0.651];
+            app.PlotFrequencySpectrumButton.FontAngle = 'italic';
+            app.PlotFrequencySpectrumButton.Position = [569 472 152 23];
+            app.PlotFrequencySpectrumButton.Text = 'Plot Frequency Spectrum';
+
+            % Create NextButton
+            app.NextButton = uibutton(app.UIFigure, 'push');
+            app.NextButton.ButtonPushedFcn = createCallbackFcn(app, @NextButtonPushed, true);
+            app.NextButton.FontAngle = 'italic';
+            app.NextButton.Position = [621 29 100 23];
+            app.NextButton.Text = 'Next';
+
+            % Create SelectedFileDropDownLabel
+            app.SelectedFileDropDownLabel = uilabel(app.UIFigure);
+            app.SelectedFileDropDownLabel.HorizontalAlignment = 'right';
+            app.SelectedFileDropDownLabel.FontAngle = 'italic';
+            app.SelectedFileDropDownLabel.Position = [364 472 74 22];
+            app.SelectedFileDropDownLabel.Text = 'Selected File';
+
+            % Create SelectedFileDropDown
+            app.SelectedFileDropDown = uidropdown(app.UIFigure);
+            app.SelectedFileDropDown.ValueChangedFcn = createCallbackFcn(app, @SelectedFileDropDownValueChanged, true);
+            app.SelectedFileDropDown.Position = [446 472 100 22];
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = vibra2
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
