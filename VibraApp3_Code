@@ -1,0 +1,181 @@
+classdef vibra3 < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                   matlab.ui.Figure
+        SelectedFileDropDown       matlab.ui.control.DropDown
+        SelectedFileDropDownLabel  matlab.ui.control.Label
+        PlotPSDButton              matlab.ui.control.Button
+        EditField                  matlab.ui.control.EditField
+        UIAxes3                    matlab.ui.control.UIAxes
+        UIAxes2                    matlab.ui.control.UIAxes
+        UIAxes                     matlab.ui.control.UIAxes
+    end
+
+    
+    properties (Access = public)
+        DataAX  % Data for X-axis acceleration
+        DataAY  % Data for Y-axis acceleration
+        DataAZ  % Data for Z-axis acceleration
+        time
+        Fs
+        T
+        L
+        t 
+        k
+    end
+    
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            app.UIFigure.Name = "Vibra SensePro";
+
+            % Get a list of all CSV files in the directory
+            csvFiles = dir('*.csv');
+            fileNames = {csvFiles.name};
+
+            % Set the dropdown items to these file names
+            app.SelectedFileDropDown.Items = fileNames;
+        end
+
+        % Button pushed function: PlotPSDButton
+        function PlotPSDButtonPushed(app, event)
+            %k = readtable('test.csv','FileType','text');
+
+            data = table2array(app.k);
+
+            app.DataAX = table2array(app.k(:,"AX"));
+            app.DataAY = table2array(app.k(:,"AY"));
+            app.DataAZ = table2array(app.k(:,"AZ"));
+            
+            % Convert the time data to seconds
+            app.time = data(:, 4)*3600 + data(:, 5)*60 + data(:, 6) + data(:, 7)/1000; % Time in seconds
+        
+            app.Fs = 1 / mean(diff(app.time));
+            app.T = 1/app.Fs;
+            app.L = length(app.DataAX);
+
+            %f = app.Fs .* (1:floor(app.L/2))/app.L;
+
+            [Pxx, f] = periodogram(app.DataAX, rectwin(app.L), app.L, app.Fs);
+            plot(app.UIAxes, f, 10*log10(Pxx));
+
+            [Pyy, f] = periodogram(app.DataAY, rectwin(app.L), app.L, app.Fs);
+            plot(app.UIAxes2, f, 10*log10(Pyy));
+
+            [Pzz, f] = periodogram(app.DataAZ, rectwin(app.L), app.L, app.Fs);
+            plot(app.UIAxes3, f, 10*log10(Pzz));
+
+            %periodogram(app.DataAX, rectwin(app.L),app.L,app.Fs)
+
+            %plot(app.UIAxes, f, periodogram);
+        end
+
+        % Value changed function: SelectedFileDropDown
+        function SelectedFileDropDownValueChanged(app, event)
+            selectedFile = app.SelectedFileDropDown.Value;
+            app.k = readtable(selectedFile, 'FileType', 'text');
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Color = [0.8 0.8 0.8];
+            app.UIFigure.Position = [100 100 711 523];
+            app.UIFigure.Name = 'MATLAB App';
+
+            % Create UIAxes
+            app.UIAxes = uiaxes(app.UIFigure);
+            title(app.UIAxes, 'PSD of X-axis Acceleration')
+            xlabel(app.UIAxes, 'frequency(Hz)')
+            ylabel(app.UIAxes, 'Power/Frequency(dB/Hz)')
+            zlabel(app.UIAxes, 'Z')
+            app.UIAxes.Position = [27 238 328 220];
+
+            % Create UIAxes2
+            app.UIAxes2 = uiaxes(app.UIFigure);
+            title(app.UIAxes2, 'PSD of Y-axis Acceleration')
+            xlabel(app.UIAxes2, 'frequency(Hz)')
+            ylabel(app.UIAxes2, 'Power/Frequency(dB/Hz)')
+            zlabel(app.UIAxes2, 'Z')
+            app.UIAxes2.Position = [375 247 323 211];
+
+            % Create UIAxes3
+            app.UIAxes3 = uiaxes(app.UIFigure);
+            title(app.UIAxes3, 'PSD of Z-axis Acceleration')
+            xlabel(app.UIAxes3, 'frequency(Hz)')
+            ylabel(app.UIAxes3, 'Power/Frequency(dB/Hz)')
+            zlabel(app.UIAxes3, 'Z')
+            app.UIAxes3.Position = [195 17 325 208];
+
+            % Create EditField
+            app.EditField = uieditfield(app.UIFigure, 'text');
+            app.EditField.HorizontalAlignment = 'center';
+            app.EditField.FontSize = 18;
+            app.EditField.FontWeight = 'bold';
+            app.EditField.BackgroundColor = [0.8 0.8 0.8];
+            app.EditField.Position = [84 481 216 27];
+            app.EditField.Value = 'Power Spectral Density';
+
+            % Create PlotPSDButton
+            app.PlotPSDButton = uibutton(app.UIFigure, 'push');
+            app.PlotPSDButton.ButtonPushedFcn = createCallbackFcn(app, @PlotPSDButtonPushed, true);
+            app.PlotPSDButton.BackgroundColor = [0.651 0.651 0.651];
+            app.PlotPSDButton.FontAngle = 'italic';
+            app.PlotPSDButton.Position = [574 483 100 23];
+            app.PlotPSDButton.Text = 'Plot PSD';
+
+            % Create SelectedFileDropDownLabel
+            app.SelectedFileDropDownLabel = uilabel(app.UIFigure);
+            app.SelectedFileDropDownLabel.HorizontalAlignment = 'right';
+            app.SelectedFileDropDownLabel.FontAngle = 'italic';
+            app.SelectedFileDropDownLabel.Position = [376 483 74 22];
+            app.SelectedFileDropDownLabel.Text = 'Selected File';
+
+            % Create SelectedFileDropDown
+            app.SelectedFileDropDown = uidropdown(app.UIFigure);
+            app.SelectedFileDropDown.ValueChangedFcn = createCallbackFcn(app, @SelectedFileDropDownValueChanged, true);
+            app.SelectedFileDropDown.Position = [457 483 100 22];
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = vibra3
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
